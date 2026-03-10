@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>고급 회전 운동 및 돌림힘 시뮬레이션</title>
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; text-align: center; background-color: #1e1e2f; color: #fff; padding: 20px; }
+        .container { display: flex; flex-direction: column; align-items: center; gap: 15px; }
+        .canvas-container { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+        canvas { background-color: #2b2b36; border: 2px solid #555; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        .controls { width: 100%; max-width: 800px; background: #2b2b36; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid #444; }
+        h2 { color: #4CAF50; margin-top: 0; }
+        button { padding: 10px 20px; margin: 5px; font-size: 15px; border: none; border-radius: 5px; cursor: pointer; transition: all 0.2s; font-weight: bold; }
+        .tab-btn { background-color: #444; color: #fff; }
+        .tab-btn.active { background-color: #4CAF50; color: white; }
+        .action-btn { background-color: #2196F3; color: white; }
+        .action-btn:active { background-color: #0b7dda; transform: scale(0.95); }
+        .stop-btn { background-color: #f44336; color: white; }
+        .stop-btn:active { background-color: #da190b; }
+        input[type=range] { width: 80%; margin: 15px 0; accent-color: #4CAF50; cursor: pointer; }
+        #step1-controls, #step2-controls { display: none; margin-top: 15px; padding-top: 15px; border-top: 1px solid #555; }
+        #step1-controls.active, #step2-controls.active { display: block; }
+        .data-display { display: flex; justify-content: space-around; background: #1a1a24; padding: 15px; border-radius: 5px; margin-top: 15px; font-size: 1.2em; font-family: monospace; color: #00ffcc; }
+    </style>
+</head>
+<body>
+
+    <h2>🔄 회전 운동과 돌림힘 ($\tau$) 분석</h2>
+    
+    <div class="container">
+        <div class="canvas-container">
+            <canvas id="simCanvas" width="400" height="400"></canvas>
+            <canvas id="graphCanvas" width="400" height="400"></canvas>
+        </div>
+
+        <div class="controls">
+            <div>
+                <button class="tab-btn active" onclick="setStep(1)" id="btn-step1">1단계: 각가속도와 방향</button>
+                <button class="tab-btn" onclick="setStep(2)" id="btn-step2">2단계: 돌림힘과 각속도 변화</button>
+            </div>
+
+            <div class="data-display">
+                <div>각속도 ($\omega$): <span id="omega-val">0.00</span> rad/s</div>
+                <div>각가속도 ($\alpha$): <span id="alpha-val">0.00</span> rad/s²</div>
+            </div>
+
+            <div id="step1-controls" class="active">
+                <p>버튼을 클릭할 때마다 짧은 시간 동안 일정한 각가속도가 작용합니다.</p>
+                <button class="action-btn" onclick="applyFixedAccel(0.01)">↻ 시계 방향으로 1회 밀기</button>
+                <button class="action-btn" onclick="applyFixedAccel(-0.01)">↺ 반시계 방향으로 1회 밀기</button>
+                <button class="stop-btn" onclick="stopRotation()">■ 완전히 멈추기 (초기화)</button>
+            </div>
+
+            <div id="step2-controls">
+                <p>힘을 가하는 위치($r$)를 선택하고 버튼을 누르세요. 중심에서 멀수록 각속도 변화량이 커집니다.</p>
+                <label for="forcePos">힘의 작용점 ($r$): 회전축 <input type="range" id="forcePos" min="0" max="1" step="0.1" value="0.5"> 끝점</label>
+                <br>
+                <button class="action-btn" onclick="applyFixedTorque()">1회 밀기 (동일한 힘 작용)</button>
+                <button class="stop-btn" onclick="stopRotation()">■ 완전히 멈추기 (초기화)</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const simCtx = document.getElementById('simCanvas').getContext('2d');
+        const graphCtx = document.getElementById('graphCanvas').getContext('2d');
+        const omegaSpan = document.getElementById('omega-val');
+        const alphaSpan = document.getElementById('alpha-val');
+        const forcePosSlider = document.getElementById('forcePos');
+
+        // 물리 변수
+        let angle = 0;
+        let omega = 0; // 각속도
+        let alpha = 0; // 각가속도
+        let currentStep = 1;
+        
+        // 클릭 이벤트 제어 변수
+        let actionFramesRemaining = 0; // 힘이 가해지는 남은 시간(프레임)
+        let targetAlpha = 0; // 적용할 각가속도
+        const applyDuration = 25; // 약 0.4초 동안 힘 작용 (60fps 기준)
+
+        // 그래프 데이터 저장용 배열
+        const maxGraphPoints = 400;
+        let omegaHistory = new Array(maxGraphPoints).fill(0);
+
+        function updatePhysics() {
+            // 정해진 시간 동안만 각가속도 적용
+            if (actionFramesRemaining > 0) {
+                alpha = targetAlpha;
+                actionFramesRemaining--;
+            } else {
+                alpha = 0; // 힘 작용이 끝나면 각가속도 0
+            }
+
+            omega += alpha; // 각속도 변화 (등각가속도 운동)
+            angle += omega; // 각도 변화 (등각속도 운동)
+
+            // 데이터 업데이트
+            omegaSpan.innerText = (omega * 50).toFixed(2);
+            alphaSpan.innerText = (alpha * 50).toFixed(3);
+
+            // 그래프 데이터 기록
+            omegaHistory.push(omega);
+            if (omegaHistory.length > maxGraphPoints) omegaHistory.shift();
+        }
+
+        function drawSim() {
+            simCtx.clearRect(0, 0, 400, 400);
+            const cx = 200, cy = 200;
+            const rodLength = 280, rodWidth = 24;
+
+            simCtx.save();
+            simCtx.translate(cx, cy);
+            simCtx.rotate(angle);
+
+            // 막대기 그리기
+            simCtx.fillStyle = '#8bc34a';
+            simCtx.fillRect(-rodLength/2, -rodWidth/2, rodLength, rodWidth);
+            simCtx.strokeStyle = '#558b2f';
+            simCtx.lineWidth = 3;
+            simCtx.strokeRect(-rodLength/2, -rodWidth/2, rodLength, rodWidth);
+
+            // 작용점 표시 및 화살표
+            if (currentStep === 2) {
+                const r = parseFloat(forcePosSlider.value);
+                const targetX = (rodLength/2) * r;
+                
+                // 작용점 표시
+                simCtx.fillStyle = '#ffeb3b';
+                simCtx.beginPath();
+                simCtx.arc(targetX, 0, 6, 0, Math.PI*2);
+                simCtx.fill();
+
+                // 힘이 가해지는 동안 화살표 표시
+                if (actionFramesRemaining > 0) {
+                    simCtx.fillStyle = '#ff5252';
+                    simCtx.beginPath();
+                    simCtx.moveTo(targetX, -50);
+                    simCtx.lineTo(targetX, -rodWidth/2);
+                    simCtx.lineTo(targetX - 10, -rodWidth/2 - 15);
+                    simCtx.lineTo(targetX + 10, -rodWidth/2 - 15);
+                    simCtx.fill();
+                    simCtx.font = "bold 16px Malgun Gothic";
+                    simCtx.fillText("F", targetX - 5, -55);
+                }
+            } else if (currentStep === 1 && actionFramesRemaining > 0) {
+                // 1단계 가속 시각 효과
+                simCtx.fillStyle = '#ff5252';
+                simCtx.font = "bold 20px Malgun Gothic";
+                const dirText = targetAlpha > 0 ? "↻" : "↺";
+                simCtx.fillText(dirText, rodLength/2 - 15, -20);
+            }
+
+            simCtx.restore();
+
+            // 회전축 (중심 핀)
+            simCtx.fillStyle = '#eee';
+            simCtx.beginPath();
+            simCtx.arc(cx, cy, 10, 0, Math.PI * 2);
+            simCtx.fill();
+            simCtx.stroke();
+        }
+
+        function drawGraph() {
+            graphCtx.clearRect(0, 0, 400, 400);
+            
+            // 그리드 및 축 그리기
+            graphCtx.strokeStyle = '#444';
+            graphCtx.lineWidth = 1;
+            graphCtx.beginPath();
+            graphCtx.moveTo(0, 200); graphCtx.lineTo(400, 200); // X축 (시간)
+            graphCtx.moveTo(20, 0); graphCtx.lineTo(20, 400);   // Y축 (각속도)
+            graphCtx.stroke();
+            
+            graphCtx.fillStyle = '#aaa';
+            graphCtx.font = "14px Arial";
+            graphCtx.fillText("시간 (t)", 340, 220);
+            graphCtx.fillText("각속도 (ω)", 30, 20);
+
+            // 중앙 기준선 표시
+            graphCtx.setLineDash([5, 5]);
+            graphCtx.beginPath();
+            graphCtx.moveTo(0, 200);
+            graphCtx.lineTo(400, 200);
+            graphCtx.stroke();
+            graphCtx.setLineDash([]);
+
+            // 각속도 그래프 선 그리기
+            graphCtx.strokeStyle = '#00e5ff';
+            graphCtx.lineWidth = 3;
+            graphCtx.beginPath();
+            const yCenter = 200;
+            const yScale = 200; // 그래프 높이 증폭
+            
+            for(let i=0; i<maxGraphPoints; i++) {
+                let x = i;
+                let y = yCenter - (omegaHistory[i] * yScale);
+                if (i === 0) graphCtx.moveTo(x, y);
+                else graphCtx.lineTo(x, y);
+            }
+            graphCtx.stroke();
+        }
+
+        function loop() {
+            updatePhysics();
+            drawSim();
+            drawGraph();
+            requestAnimationFrame(loop);
+        }
+
+        // 제어 함수들 (1회 클릭 시 작동)
+        function applyFixedAccel(val) {
+            targetAlpha = val;
+            actionFramesRemaining = applyDuration; // 정해진 프레임 수만큼만 적용
+        }
+
+        function applyFixedTorque() {
+            const r = parseFloat(forcePosSlider.value);
+            const F = 0.02; // 항상 동일한 힘
+            targetAlpha = r * F; // 돌림힘에 비례하는 각가속도
+            actionFramesRemaining = applyDuration;
+        }
+
+        function stopRotation() {
+            omega = 0;
+            alpha = 0;
+            targetAlpha = 0;
+            actionFramesRemaining = 0;
+            omegaHistory.fill(0); // 그래프 초기화
+        }
+
+        function setStep(step) {
+            currentStep = step;
+            stopRotation(); // 단계 변경 시 초기화
+            document.getElementById('btn-step1').classList.remove('active');
+            document.getElementById('btn-step2').classList.remove('active');
+            document.getElementById('step1-controls').classList.remove('active');
+            document.getElementById('step2-controls').classList.remove('active');
+
+            document.getElementById('btn-step' + step).classList.add('active');
+            document.getElementById('step' + step + '-controls').classList.add('active');
+        }
+
+        loop(); // 루프 시작
+    </script>
+</body>
+</html>
