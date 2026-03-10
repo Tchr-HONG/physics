@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>다단계 가상 모빌 만들기</title>
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; text-align: center; background-color: #1e1e2f; color: #fff; padding: 20px; margin: 0; }
+        .home-btn { position: absolute; top: 20px; left: 20px; text-decoration: none; background-color: #444; color: #fff; padding: 8px 15px; border-radius: 5px; font-size: 14px; font-weight: bold; transition: 0.2s; border: 1px solid #666; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        .home-btn:hover { background-color: #ffeb3b; color: #333; border-color: #ffeb3b; }
+        
+        .container { display: flex; flex-direction: column; align-items: center; gap: 15px; margin-top: 40px; }
+        canvas { background-color: #2b2b36; border: 2px solid #555; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); cursor: pointer; }
+        .controls { width: 100%; max-width: 800px; background: #2b2b36; padding: 20px; border-radius: 8px; border: 1px solid #444; }
+        h2 { color: #ffeb3b; margin-top: 0; }
+        
+        .tool-group { margin: 15px 0; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+        .tool-btn { padding: 10px 15px; font-size: 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.2s; background-color: #444; color: white; border-bottom: 4px solid transparent; }
+        .tool-btn.active { background-color: #555; transform: translateY(2px); border-bottom-width: 2px; }
+        
+        /* 툴 색상 */
+        .w1.active { background-color: #4CAF50; border-color: #388E3C; box-shadow: 0 0 10px #4CAF50; }
+        .w2.active { background-color: #FF9800; border-color: #F57C00; box-shadow: 0 0 10px #FF9800; }
+        .w3.active { background-color: #E91E63; border-color: #C2185B; box-shadow: 0 0 10px #E91E63; }
+        .beam-tool { border-bottom: 4px solid #00BCD4; }
+        .beam-tool.active { background-color: #00BCD4; border-color: #0097A7; box-shadow: 0 0 10px #00BCD4; }
+        .eraser-tool { border-bottom: 4px solid #9E9E9E; }
+        .eraser-tool.active { background-color: #757575; border-color: #616161; box-shadow: 0 0 10px #9E9E9E; }
+        
+        .action-btn { background-color: #f44336; color: white; padding: 10px 20px; font-size: 14px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; margin-top: 5px; }
+        
+        .status-board { display: flex; justify-content: space-around; background: #1a1a24; padding: 15px; border-radius: 8px; margin-top: 15px; font-size: 1.1em; }
+        .torque-val { font-size: 1.3em; font-weight: bold; color: #00e5ff; margin-top: 5px; }
+        .balance-status { font-size: 1.2em; font-weight: bold; margin-top: 10px; padding: 10px; border-radius: 5px; }
+        .balanced { background-color: rgba(76, 175, 80, 0.2); color: #4CAF50; border: 1px solid #4CAF50; }
+        .unbalanced { background-color: rgba(244, 67, 54, 0.2); color: #f44336; border: 1px solid #f44336; }
+        .instruction { color: #aaa; font-size: 0.9em; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+    <a href="../index.html" class="home-btn">🏠 홈으로 돌아가기</a>
+
+    <div class="container">
+        <h2>⚖️ 2단 모빌 만들기: 돌림힘 평형 실험실</h2>
+        <canvas id="simCanvas" width="800" height="500"></canvas>
+
+        <div class="controls">
+            <p class="instruction">1. 달고 싶은 추나 보조 막대를 선택하고 눈금을 클릭하세요. (다른 무게를 누르면 교체됩니다)</p>
+            <p class="instruction">2. <b style="color:#ffeb3b;">지우개</b>를 선택하고 매달린 추나 실을 클릭하면 해체됩니다.</p>
+            
+            <div class="tool-group">
+                <button class="tool-btn w1 active" id="btn-w1" onclick="setTool('weight', 1)">🟢 1kg 추</button>
+                <button class="tool-btn w2" id="btn-w2" onclick="setTool('weight', 2)">🟠 2kg 추</button>
+                <button class="tool-btn w3" id="btn-w3" onclick="setTool('weight', 3)">🔴 3kg 추</button>
+                <button class="tool-btn beam-tool" id="btn-beam" onclick="setTool('beam', 0)">🟦 2단 보조 막대</button>
+                <button class="tool-btn eraser-tool" id="btn-eraser" onclick="setTool('eraser', 0)">🧽 지우개 (해체)</button>
+            </div>
+
+            <div class="status-board">
+                <div class="torque-val" id="torque-left">&Sigma;&tau;<sub>L</sub> : 0</div>
+                <div class="torque-val" id="torque-right">&Sigma;&tau;<sub>R</sub> : 0</div>
+            </div>
+            
+            <div id="balance-msg" class="balance-status balanced">상태: 완벽한 평형 상태입니다! ✨</div>
+
+            <button class="action-btn" onclick="clearAll()">🗑️ 전체 초기화</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let currentTool = { type: 'weight', mass: 1 };
+        
+        // 막대 데이터 구조
+        let rootBeam = {
+            level: 1,
+            pegs: [-5, -4, -3, -2, -1, 1, 2, 3, 4, 5],
+            spacing: 40,
+            items: {},
+            angle: 0,
+            targetAngle: 0,
+            color: '#607d8b'
+        };
+
+        let activePegs = []; // 클릭 가능한 히트박스(Hitbox) 저장 배열
+
+        const weightStyles = {
+            1: { color: '#4CAF50', radius: 15, length: 40 },
+            2: { color: '#FF9800', radius: 22, length: 60 },
+            3: { color: '#E91E63', radius: 28, length: 80 }
+        };
+
+        function setTool(type, mass) {
+            currentTool = { type: type, mass: mass };
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            if (type === 'weight') document.getElementById('btn-w' + mass).classList.add('active');
+            else if (type === 'beam') document.getElementById('btn-beam').classList.add('active');
+            else document.getElementById('btn-eraser').classList.add('active'); // 지우개 활성화
+        }
+
+        // --- 물리 엔진 ---
+        function updatePhysics(beam) {
+            let leftTorque = 0;
+            let rightTorque = 0;
+            let totalMass = 0;
+
+            for (let posStr in beam.items) {
+                let pos = parseInt(posStr);
+                let item = beam.items[pos];
+                let itemMass = 0;
+                
+                if (item.type === 'weight') {
+                    itemMass = item.mass;
+                } else if (item.type === 'beam') {
+                    itemMass = updatePhysics(item.beam); // 보조 막대 무게 합산
+                }
+                
+                totalMass += itemMass;
+                if (pos < 0) leftTorque += Math.abs(pos) * itemMass;
+                else if (pos > 0) rightTorque += pos * itemMass;
+            }
+            
+            let netTorque = rightTorque - leftTorque;
+            beam.targetAngle = Math.max(-0.45, Math.min(0.45, netTorque * 0.04));
+
+            if (beam === rootBeam) {
+                document.getElementById('torque-left').innerHTML = "&Sigma;&tau;<sub>L</sub> : " + leftTorque + " (거리&times;질량)";
+                document.getElementById('torque-right').innerHTML = "&Sigma;&tau;<sub>R</sub> : " + rightTorque + " (거리&times;질량)";
+                
+                const msgEl = document.getElementById('balance-msg');
+                if (netTorque === 0 && totalMass > 0) {
+                    msgEl.className = 'balance-status balanced';
+                    msgEl.innerText = '상태: 완벽한 역학적 평형! ✨';
+                } else if (totalMass === 0) {
+                    msgEl.className = 'balance-status balanced';
+                    msgEl.innerText = '상태: 추나 보조 막대를 매달아 보세요.';
+                } else {
+                    msgEl.className = 'balance-status unbalanced';
+                    msgEl.innerText = netTorque > 0 ? '상태: 오른쪽으로 쏠립니다! ↘️' : '상태: 왼쪽으로 쏠립니다! ↙️';
+                }
+            }
+            return totalMass;
+        }
+
+        // --- 캔버스 클릭 처리 (완벽 수정본) ---
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const mouseX = (e.clientX - rect.left) * scaleX;
+            const mouseY = (e.clientY - rect.top) * scaleY;
+
+            let clickedTarget = null;
+            let minDist = Infinity;
+
+            // 눈금뿐만 아니라 물체(추, 보조막대 중심)의 위치까지 확장된 클릭 판정
+            for (let target of activePegs) {
+                let dist = Math.hypot(mouseX - target.screenX, mouseY - target.screenY);
+                if (dist < target.hitRadius && dist < minDist) {
+                    minDist = dist;
+                    clickedTarget = target;
+                }
+            }
+
+            if (clickedTarget) {
+                let beam = clickedTarget.beam;
+                let pos = clickedTarget.pos;
+
+                // 1. 지우개를 선택한 경우
+                if (currentTool.type === 'eraser') {
+                    if (beam.items[pos]) delete beam.items[pos];
+                } 
+                // 2. 다른 툴을 선택한 경우 (새로 매달거나 교체)
+                else {
+                    if (currentTool.type === 'weight') {
+                        beam.items[pos] = { type: 'weight', mass: currentTool.mass };
+                    } 
+                    else if (currentTool.type === 'beam') {
+                        if (beam.level >= 2) {
+                            alert("물리 법칙의 안정성을 위해 보조 막대는 1단 막대에만 달 수 있습니다!");
+                        } else {
+                            beam.items[pos] = {
+                                type: 'beam',
+                                beam: {
+                                    level: beam.level + 1,
+                                    pegs: [-3, -2, -1, 1, 2, 3],
+                                    spacing: 30,
+                                    items: {},
+                                    angle: 0,
+                                    targetAngle: 0,
+                                    color: '#00BCD4'
+                                }
+                            };
+                        }
+                    }
+                }
+                updatePhysics(rootBeam);
+            }
+        });
+
+        function clearAll() {
+            rootBeam.items = {};
+            updatePhysics(rootBeam);
+        }
+
+        // --- 렌더링 엔진 ---
+        function drawBeam(beam, pivotX, pivotY) {
+            beam.angle += (beam.targetAngle - beam.angle) * 0.1;
+
+            ctx.save();
+            ctx.translate(pivotX, pivotY);
+
+            ctx.fillStyle = (beam.level === 1) ? '#ffeb3b' : '#fff';
+            ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(-8, 10); ctx.lineTo(8, 10); ctx.fill();
+
+            ctx.rotate(beam.angle);
+
+            const maxPeg = Math.max(...beam.pegs);
+            const beamHalfLength = maxPeg * beam.spacing + 15;
+            
+            ctx.fillStyle = beam.color;
+            ctx.fillRect(-beamHalfLength, -4, beamHalfLength * 2, 8);
+            
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center';
+
+            const matrix = ctx.getTransform();
+
+            beam.pegs.forEach(pos => {
+                let localX = pos * beam.spacing;
+                let screenX = matrix.a * localX + matrix.e;
+                let screenY = matrix.b * localX + matrix.f;
+                
+                // 1. 눈금 자체의 히트박스 (반경 15)
+                activePegs.push({ beam: beam, pos: pos, screenX: screenX, screenY: screenY, hitRadius: 15 });
+
+                ctx.fillRect(localX - 2, -8, 4, 16);
+                ctx.fillText(Math.abs(pos), localX, -12);
+
+                if (beam.items[pos]) {
+                    let item = beam.items[pos];
+                    
+                    // 2. 매달린 물체 자체의 히트박스 추가 (물체 클릭해도 반응하도록)
+                    if (item.type === 'weight') {
+                        let style = weightStyles[item.mass];
+                        // 중력 방향(수직 아래)으로 매달리므로 화면 Y좌표에 길이를 더해줌
+                        activePegs.push({ beam: beam, pos: pos, screenX: screenX, screenY: screenY + style.length + style.radius, hitRadius: style.radius + 15 });
+                    } else if (item.type === 'beam') {
+                        // 실의 중간 부분을 눌러도 반응하도록 추가
+                        activePegs.push({ beam: beam, pos: pos, screenX: screenX, screenY: screenY + 50, hitRadius: 40 });
+                    }
+
+                    // 물체 그리기
+                    ctx.save();
+                    ctx.translate(localX, 4); 
+                    ctx.rotate(-beam.angle);  // 중력 방향 역회전
+
+                    if (item.type === 'weight') {
+                        let style = weightStyles[item.mass];
+                        ctx.strokeStyle = '#ccc'; ctx.lineWidth = 2;
+                        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, style.length); ctx.stroke();
+                        ctx.fillStyle = style.color;
+                        ctx.beginPath(); ctx.arc(0, style.length + style.radius, style.radius, 0, Math.PI * 2); ctx.fill();
+                        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+                        ctx.fillStyle = '#fff'; ctx.font = 'bold 14px Arial';
+                        ctx.fillText(item.mass + 'kg', 0, style.length + style.radius + 5);
+                    } 
+                    else if (item.type === 'beam') {
+                        const stringLen = 100; 
+                        ctx.strokeStyle = '#ccc'; ctx.lineWidth = 2;
+                        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, stringLen); ctx.stroke();
+                        drawBeam(item.beam, 0, stringLen);
+                    }
+                    ctx.restore();
+                } else {
+                    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+                    ctx.beginPath(); ctx.arc(localX, 0, 10, 0, Math.PI*2); ctx.fill();
+                }
+            });
+            ctx.restore();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            activePegs = []; // 프레임마다 클릭 영역 초기화
+
+            ctx.strokeStyle = '#888'; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(300, 0); ctx.lineTo(500, 0); ctx.stroke();
+            
+            const rootPivotX = 400, rootPivotY = 80;
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(rootPivotX, 0); ctx.lineTo(rootPivotX, rootPivotY); ctx.stroke();
+
+            drawBeam(rootBeam, rootPivotX, rootPivotY);
+            requestAnimationFrame(draw);
+        }
+
+        updatePhysics(rootBeam);
+        draw();
+    </script>
+</body>
+</html>

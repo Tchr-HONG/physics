@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>도형별 무게중심과 평형</title>
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; text-align: center; background-color: #1e1e2f; color: #fff; padding: 20px; margin: 0; }
+        .container { display: flex; flex-direction: column; align-items: center; gap: 15px; }
+        canvas { background-color: #2b2b36; border: 2px solid #555; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); cursor: crosshair; }
+        .controls { width: 100%; max-width: 700px; background: #2b2b36; padding: 20px; border-radius: 8px; border: 1px solid #444; }
+        h2 { color: #ffeb3b; margin-top: 0; }
+        button { padding: 8px 15px; margin: 5px; font-size: 14px; border: none; border-radius: 5px; cursor: pointer; transition: 0.2s; font-weight: bold; }
+        button:disabled { background-color: #555 !important; color: #888 !important; cursor: not-allowed; }
+        .tab-btn { background-color: #444; color: #fff; }
+        .tab-btn.active { background-color: #ffeb3b; color: #333; }
+        .shape-btn { background-color: #607d8b; color: white; }
+        .shape-btn.active { background-color: #03a9f4; }
+        .action-btn { background-color: #e91e63; color: white; }
+        .hang-btn { background-color: #4CAF50; color: white; padding: 10px 20px; font-size: 16px; }
+        .rotate-btn { background-color: #ff9800; color: white; font-size: 15px; padding: 8px 20px; border-radius: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        input[type=range] { width: 200px; vertical-align: middle; accent-color: #ffeb3b; }
+        .slider-group { margin: 15px 0; display: flex; justify-content: center; align-items: center; gap: 15px; }
+        #step1-controls, #step2-controls { display: none; margin-top: 15px; padding-top: 15px; border-top: 1px solid #555; }
+        #step1-controls.active, #step2-controls.active { display: block; }
+        .status-box { background: #1a1a24; padding: 10px; border-radius: 5px; margin-top: 10px; font-size: 1.2em; font-weight: bold; transition: 0.3s; }
+        .warning { color: #ff5252; border: 1px solid #ff5252; }
+        .safe { color: #4CAF50; border: 1px solid #4CAF50; }
+        .instruction { color: #aaa; font-size: 0.9em; margin-bottom: 10px; }
+        .highlight-text { color: #ffeb3b; font-weight: bold; }
+        .home-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            text-decoration: none;
+            background-color: #444;
+            color: #fff;
+            padding: 8px 15px;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            transition: 0.2s;
+            border: 1px solid #666;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        .home-btn:hover {
+            background-color: #ffeb3b;
+            color: #333;
+            border-color: #ffeb3b;
+        }
+    </style>
+</head>
+<body>
+    <a href="../index.html" class="home-btn">🏠 홈으로 돌아가기</a>
+    <h2>🎨 내 맘대로 무게중심 & 빗면 안정성</h2>
+    
+    <div class="container">
+        <canvas id="simCanvas" width="600" height="400"></canvas>
+
+        <div class="controls">
+            <div>
+                <button class="tab-btn active" onclick="setStep(1)" id="btn-step1">1단계: 먹선으로 무게중심 찾기</button>
+                <button class="tab-btn" onclick="setStep(2)" id="btn-step2" disabled>2단계: 빗면에서 굴려보기</button>
+            </div>
+
+            <div id="step1-controls" class="active">
+                <div id="draw-mode-ui">
+                    <p class="instruction">기본 도형을 선택하거나, '자유 도형 그리기'를 눌러 화면에 점을 찍어보세요!</p>
+                    <button class="shape-btn active" id="btn-rect" onclick="setShape('rect')">직사각형</button>
+                    <button class="shape-btn" id="btn-tri" onclick="setShape('tri')">삼각형</button>
+                    <button class="shape-btn" id="btn-custom" onclick="setShape('custom')">✏️ 자유 도형 그리기</button>
+                    
+                    <div id="custom-tools" style="display: none; margin-top: 10px;">
+                        <button class="action-btn" onclick="finishCustomShape()">✅ 그리기 완료</button>
+                        <button style="background:#757575; color:white;" onclick="clearCustomShape()">초기화</button>
+                    </div>
+                    <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
+                    <button class="hang-btn" onclick="startHangMode()" id="btn-start-hang">📍 실험 시작 (도형 매달기)</button>
+                </div>
+
+                <div id="hang-mode-ui" style="display: none;">
+                    <p class="instruction highlight-text">도형 안쪽의 '아무 곳'이나 클릭하여 압정으로 매달아보세요.</p>
+                    <button class="action-btn" onclick="drawInkLine()" id="btn-draw-ink" disabled>📏 수직으로 먹선 긋기</button>
+                    <button style="background:#757575; color:white;" onclick="resetHangMode()">도형 다시 그리기</button>
+                    <p id="hang-status" style="margin-top:10px; color:#4CAF50; font-weight:bold; display:none;">🎉 무게중심(CM)을 찾았습니다! 이제 2단계로 이동하세요.</p>
+                </div>
+            </div>
+
+            <div id="step2-controls">
+                <p class="instruction">어느 면을 바닥에 놓았을 때 가장 안정적일까요? 면을 바꾸며 각도를 올려보세요!</p>
+                
+                <button class="rotate-btn" onclick="nextBaseEdge()">🔄 빗면과 닿는 면 바꾸기</button>
+
+                <div class="slider-group">
+                    <label>빗면 각도: <span id="angle-val">0</span>°</label>
+                    <input type="range" id="slopeAngle" min="0" max="60" value="0" oninput="updateSlope()">
+                </div>
+                <div class="status-box" id="stability-status" class="safe">
+                    상태: 안정 (역학적 평형)
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        let currentStep = 1;
+
+        let currentShapeMode = 'rect';
+        let vertices = []; 
+        let customPoints = []; 
+        let isDrawing = false;
+        let cm = {x: 0, y: 0}; 
+        
+        // 1단계 변수
+        let isHangMode = false;
+        let hangPivotPoint = null; 
+        let objAngle = 0; 
+        let targetAngle = 0; 
+        let inkLines = []; 
+        let cmFound = false;
+
+        // 2단계 (빗면) 특화 변수
+        let slopeTheta = 0;
+        let isToppling = false;
+        let toppleAnim = 0;
+        let baseEdgeIndex = 0;   // 현재 바닥과 닿을 변의 인덱스
+        let step2Rotation = 0;   // 바닥을 맞추기 위한 도형 회전각
+
+        function setShape(mode) {
+            currentShapeMode = mode;
+            document.querySelectorAll('.shape-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('btn-' + mode).classList.add('active');
+            document.getElementById('custom-tools').style.display = (mode === 'custom') ? 'block' : 'none';
+            document.getElementById('btn-start-hang').disabled = (mode === 'custom'); 
+            
+            customPoints = [];
+            isDrawing = (mode === 'custom');
+
+            if (mode === 'rect') {
+                vertices = [{x: 200, y: 150}, {x: 400, y: 150}, {x: 400, y: 250}, {x: 200, y: 250}];
+                calculateCM();
+            } else if (mode === 'tri') {
+                vertices = [{x: 300, y: 100}, {x: 400, y: 300}, {x: 200, y: 300}];
+                calculateCM();
+            } else {
+                vertices = [];
+                cm = {x: 0, y: 0};
+            }
+        }
+
+        function calculateCM() {
+            if (vertices.length < 3) return;
+            let signedArea = 0, cx = 0, cy = 0;
+            for (let i = 0; i < vertices.length; i++) {
+                let x0 = vertices[i].x, y0 = vertices[i].y;
+                let x1 = vertices[(i + 1) % vertices.length].x, y1 = vertices[(i + 1) % vertices.length].y;
+                let a = x0 * y1 - x1 * y0;
+                signedArea += a; cx += (x0 + x1) * a; cy += (y0 + y1) * a;
+            }
+            signedArea *= 0.5;
+            cm = { x: cx / (6 * signedArea), y: cy / (6 * signedArea) };
+        }
+
+        function isPointInPolygon(x, y, poly) {
+            let inside = false;
+            for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+                let xi = poly[i].x, yi = poly[i].y;
+                let xj = poly[j].x, yj = poly[j].y;
+                let intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                if (intersect) inside = !inside;
+            }
+            return inside;
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            const mouseX = e.offsetX; 
+            const mouseY = e.offsetY;
+
+            if (currentStep === 1 && isDrawing && !isHangMode) {
+                customPoints.push({x: mouseX, y: mouseY});
+            } else if (currentStep === 1 && isHangMode) {
+                let localX, localY;
+                if (!hangPivotPoint) {
+                    localX = mouseX - (300 - cm.x);
+                    localY = mouseY - (200 - cm.y);
+                } else {
+                    let dx = mouseX - 300, dy = mouseY - 100;
+                    let cos = Math.cos(-objAngle), sin = Math.sin(-objAngle);
+                    localX = dx * cos - dy * sin + hangPivotPoint.x;
+                    localY = dx * sin + dy * cos + hangPivotPoint.y;
+                }
+
+                if (isPointInPolygon(localX, localY, vertices)) {
+                    if (Math.hypot(cm.x - localX, cm.y - localY) < 5) {
+                        alert("무게중심을 바로 찌르면 돌아가지 않아요! 다른 곳을 찍어주세요."); return;
+                    }
+                    hangFrom(localX, localY);
+                } else {
+                    alert("도형 안쪽(면)을 클릭해야 압정으로 꽂을 수 있습니다!");
+                }
+            }
+        });
+
+        function finishCustomShape() {
+            if (customPoints.length < 3) return alert("3개 이상의 점을 찍어주세요!");
+            vertices = [...customPoints]; calculateCM(); isDrawing = false;
+            document.getElementById('btn-start-hang').disabled = false;
+        }
+
+        function clearCustomShape() {
+            customPoints = []; vertices = []; isDrawing = true;
+            document.getElementById('btn-start-hang').disabled = true;
+        }
+
+        function startHangMode() {
+            isHangMode = true;
+            document.getElementById('draw-mode-ui').style.display = 'none';
+            document.getElementById('hang-mode-ui').style.display = 'block';
+            hangPivotPoint = null; objAngle = 0; targetAngle = 0; inkLines = []; cmFound = false;
+        }
+
+        function resetHangMode() {
+            isHangMode = false;
+            document.getElementById('draw-mode-ui').style.display = 'block';
+            document.getElementById('hang-mode-ui').style.display = 'none';
+            document.getElementById('btn-step2').disabled = true;
+            document.getElementById('hang-status').style.display = 'none';
+        }
+
+        function hangFrom(x, y) {
+            hangPivotPoint = {x: x, y: y};
+            document.getElementById('btn-draw-ink').disabled = false;
+            const dx = cm.x - x, dy = cm.y - y;
+            const localAngle = Math.atan2(dy, dx);
+            targetAngle = Math.PI/2 - localAngle;
+            while(targetAngle - objAngle > Math.PI) targetAngle -= Math.PI*2;
+            while(targetAngle - objAngle < -Math.PI) targetAngle += Math.PI*2;
+        }
+
+        function drawInkLine() {
+            if (!hangPivotPoint) return;
+            const exists = inkLines.some(line => Math.hypot(line.pivot.x - hangPivotPoint.x, line.pivot.y - hangPivotPoint.y) < 5);
+            if (exists) return alert("이 압정 위치에는 이미 선을 그었습니다. 다른 곳을 찍어주세요!");
+
+            inkLines.push({
+                pivot: hangPivotPoint, p1: {x: hangPivotPoint.x, y: hangPivotPoint.y},
+                p2: { x: hangPivotPoint.x + (cm.x - hangPivotPoint.x) * 15, y: hangPivotPoint.y + (cm.y - hangPivotPoint.y) * 15 }
+            });
+
+            if (inkLines.length >= 2) {
+                cmFound = true; document.getElementById('hang-status').style.display = 'block';
+                document.getElementById('btn-step2').disabled = false;
+            }
+        }
+
+        // --- 2단계 바닥 면 회전 알고리즘 ---
+        function setBaseEdge(index) {
+            baseEdgeIndex = index;
+            let v0 = vertices[index];
+            let v1 = vertices[(index + 1) % vertices.length];
+            
+            let dx = v1.x - v0.x;
+            let dy = v1.y - v0.y;
+            
+            // 변이 수평이 되도록 회전각 계산
+            let rot = -Math.atan2(dy, dx);
+            
+            // 무게중심이 변 위에 놓이도록 방향(위/아래) 조정
+            let cmDx = cm.x - v0.x;
+            let cmDy = cm.y - v0.y;
+            let newCmY = cmDx * Math.sin(rot) + cmDy * Math.cos(rot);
+            
+            // 캔버스 Y좌표는 아래로 갈수록 커짐. newCmY가 양수면 물체가 바닥을 뚫고 지하에 있는 상태이므로 180도 뒤집어줌.
+            if (newCmY > 0) rot += Math.PI;
+            
+            step2Rotation = rot;
+            toppleAnim = 0; // 넘어짐 애니메이션 초기화
+        }
+
+        function nextBaseEdge() {
+            baseEdgeIndex = (baseEdgeIndex + 1) % vertices.length;
+            setBaseEdge(baseEdgeIndex);
+            
+            // 빗면 각도 초기화 (공정한 비교를 위해)
+            slopeTheta = 0;
+            document.getElementById('slopeAngle').value = 0;
+            document.getElementById('angle-val').innerText = 0;
+        }
+
+        // --- 렌더링 ---
+        function drawStep1() {
+            if (!isHangMode) {
+                ctx.fillStyle = '#aaa'; ctx.font = "14px Arial";
+                ctx.fillText(currentShapeMode === 'custom' && isDrawing ? "화면을 클릭해 다각형의 점들을 자유롭게 찍으세요." : "실험 시작을 눌러 매달기 모드로 가세요.", 20, 30);
+                
+                if (currentShapeMode === 'custom' && isDrawing && customPoints.length > 0) {
+                    ctx.strokeStyle = '#aaa'; ctx.lineWidth = 2; ctx.beginPath();
+                    ctx.moveTo(customPoints[0].x, customPoints[0].y);
+                    for (let i = 1; i < customPoints.length; i++) ctx.lineTo(customPoints[i].x, customPoints[i].y);
+                    ctx.stroke();
+                    customPoints.forEach(p => { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI*2); ctx.fill(); });
+                }
+
+                if (vertices.length >= 3 && !isDrawing) {
+                    ctx.save(); ctx.translate(300 - cm.x, 200 - cm.y); 
+                    ctx.fillStyle = 'rgba(33, 150, 243, 0.6)'; ctx.strokeStyle = '#2196F3'; ctx.lineWidth = 3;
+                    ctx.beginPath(); ctx.moveTo(vertices[0].x, vertices[0].y);
+                    for (let i = 1; i < vertices.length; i++) ctx.lineTo(vertices[i].x, vertices[i].y);
+                    ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+                }
+            } else {
+                objAngle += (targetAngle - objAngle) * 0.1;
+                ctx.save();
+                let renderPivotX = 300, renderPivotY = 100;
+
+                if (hangPivotPoint) {
+                    ctx.translate(renderPivotX, renderPivotY); ctx.rotate(objAngle); ctx.translate(-hangPivotPoint.x, -hangPivotPoint.y);
+                } else {
+                    ctx.translate(300 - cm.x, 200 - cm.y); 
+                }
+
+                ctx.fillStyle = 'rgba(33, 150, 243, 0.6)'; ctx.strokeStyle = '#2196F3'; ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.moveTo(vertices[0].x, vertices[0].y);
+                for (let i = 1; i < vertices.length; i++) ctx.lineTo(vertices[i].x, vertices[i].y);
+                ctx.closePath(); ctx.fill(); ctx.stroke();
+
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)'; ctx.setLineDash([10, 5]); ctx.lineWidth = 2;
+                inkLines.forEach(line => { ctx.beginPath(); ctx.moveTo(line.p1.x, line.p1.y); ctx.lineTo(line.p2.x, line.p2.y); ctx.stroke(); });
+                ctx.setLineDash([]);
+
+                if (cmFound) {
+                    ctx.fillStyle = '#ff5252'; ctx.beginPath(); ctx.arc(cm.x, cm.y, 8, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = '#fff'; ctx.font = "bold 16px Arial"; ctx.fillText("CM", cm.x + 10, cm.y + 5);
+                }
+                if (hangPivotPoint) { ctx.fillStyle = '#e91e63'; ctx.beginPath(); ctx.arc(hangPivotPoint.x, hangPivotPoint.y, 6, 0, Math.PI*2); ctx.fill(); }
+                ctx.restore();
+
+                if (hangPivotPoint) {
+                    ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.beginPath();
+                    ctx.moveTo(renderPivotX, renderPivotY); ctx.lineTo(renderPivotX, 400); ctx.stroke();
+                    ctx.fillStyle = '#e91e63'; ctx.beginPath(); ctx.arc(renderPivotX, renderPivotY, 8, 0, Math.PI*2); ctx.fill();
+                }
+            }
+        }
+
+        // --- 2단계 로직 ---
+        function drawStep2() {
+            // 사용자가 선택한 바닥면을 기준으로 점들을 회전시킴 (CM 기준 회전)
+            let rotVerts = vertices.map(v => {
+                let dx = v.x - cm.x, dy = v.y - cm.y;
+                return {
+                    x: cm.x + dx * Math.cos(step2Rotation) - dy * Math.sin(step2Rotation),
+                    y: cm.y + dx * Math.sin(step2Rotation) + dy * Math.cos(step2Rotation)
+                };
+            });
+
+            let rotInkLines = inkLines.map(line => {
+                let dx1 = line.p1.x - cm.x, dy1 = line.p1.y - cm.y;
+                let dx2 = line.p2.x - cm.x, dy2 = line.p2.y - cm.y;
+                return {
+                    p1: { x: cm.x + dx1 * Math.cos(step2Rotation) - dy1 * Math.sin(step2Rotation), y: cm.y + dx1 * Math.sin(step2Rotation) + dy1 * Math.cos(step2Rotation) },
+                    p2: { x: cm.x + dx2 * Math.cos(step2Rotation) - dy2 * Math.sin(step2Rotation), y: cm.y + dx2 * Math.sin(step2Rotation) + dy2 * Math.cos(step2Rotation) }
+                };
+            });
+
+            let maxY = -Infinity;
+            rotVerts.forEach(v => { if (v.y > maxY) maxY = v.y; });
+            let minX_at_maxY = Infinity, maxX_at_maxY = -Infinity;
+            rotVerts.forEach(v => {
+                if (Math.abs(v.y - maxY) < 5) {
+                    if (v.x < minX_at_maxY) minX_at_maxY = v.x;
+                    if (v.x > maxX_at_maxY) maxX_at_maxY = v.x;
+                }
+            });
+
+            const pivotX = 300, pivotY = 320, rad = slopeTheta * Math.PI / 180;
+            const baseCenterX = (minX_at_maxY + maxX_at_maxY) / 2;
+            const offsetX = pivotX - baseCenterX, offsetY = pivotY - maxY;
+
+            const h = maxY - cm.y;
+            const cmLocalX = cm.x - baseCenterX; 
+            const gravityX_on_base = cmLocalX + h * Math.tan(rad);
+            const baseLeft = minX_at_maxY - baseCenterX, baseRight = maxX_at_maxY - baseCenterX;
+
+            isToppling = gravityX_on_base > baseRight || gravityX_on_base < baseLeft;
+
+            const statusEl = document.getElementById('stability-status');
+            if (isToppling) {
+                toppleAnim += (Math.PI/2 - toppleAnim) * 0.1;
+                statusEl.className = 'status-box warning'; statusEl.innerText = '상태: 넘어짐! (CM 작용선이 기저면 이탈)';
+            } else {
+                toppleAnim += (0 - toppleAnim) * 0.1;
+                statusEl.className = 'status-box safe'; statusEl.innerText = '상태: 안정 (역학적 평형)';
+            }
+
+            ctx.save();
+            ctx.translate(pivotX, pivotY);
+            ctx.rotate(rad);
+            
+            ctx.fillStyle = '#555'; ctx.fillRect(-400, 0, 800, 200);
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-400, 0); ctx.lineTo(400, 0); ctx.stroke();
+
+            ctx.save();
+            if (isToppling) {
+                if (gravityX_on_base > baseRight) { ctx.translate(baseRight, 0); ctx.rotate(toppleAnim); ctx.translate(-baseRight, 0); } 
+                else { ctx.translate(baseLeft, 0); ctx.rotate(-toppleAnim); ctx.translate(-baseLeft, 0); }
+            }
+
+            ctx.translate(offsetX - pivotX, offsetY - pivotY);
+
+            ctx.fillStyle = 'rgba(33, 150, 243, 0.6)'; ctx.strokeStyle = '#2196F3'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(rotVerts[0].x, rotVerts[0].y);
+            for (let i = 1; i < rotVerts.length; i++) ctx.lineTo(rotVerts[i].x, rotVerts[i].y);
+            ctx.closePath(); ctx.fill(); ctx.stroke();
+
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)'; ctx.setLineDash([5, 5]); ctx.lineWidth = 2;
+            rotInkLines.forEach(line => { ctx.beginPath(); ctx.moveTo(line.p1.x, line.p1.y); ctx.lineTo(line.p2.x, line.p2.y); ctx.stroke(); });
+            ctx.setLineDash([]);
+
+            ctx.fillStyle = '#ff5252'; ctx.beginPath(); ctx.arc(cm.x, cm.y, 8, 0, Math.PI*2); ctx.fill();
+
+            ctx.save(); ctx.translate(cm.x, cm.y);
+            let totalRotation = rad;
+            if (isToppling) totalRotation += (gravityX_on_base > baseRight) ? toppleAnim : -toppleAnim;
+            ctx.rotate(-totalRotation);
+
+            ctx.strokeStyle = isToppling ? '#ff5252' : '#ffeb3b'; ctx.setLineDash([5, 5]); ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 300); ctx.stroke(); ctx.setLineDash([]);
+            ctx.fillStyle = isToppling ? '#ff5252' : '#ffeb3b';
+            ctx.beginPath(); ctx.moveTo(-6, 150); ctx.lineTo(6, 150); ctx.lineTo(0, 160); ctx.fill();
+            ctx.restore();
+
+            ctx.restore(); ctx.restore();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (currentStep === 1) drawStep1(); else drawStep2();
+            requestAnimationFrame(draw);
+        }
+
+        function setStep(step) {
+            currentStep = step;
+            document.getElementById('btn-step1').classList.remove('active');
+            document.getElementById('btn-step2').classList.remove('active');
+            document.getElementById('step1-controls').classList.remove('active');
+            document.getElementById('step2-controls').classList.remove('active');
+            document.getElementById('btn-step' + step).classList.add('active');
+            document.getElementById('step' + step + '-controls').classList.add('active');
+            
+            if (step === 2) { 
+                baseEdgeIndex = 0; // 2단계 처음 진입시 기본 첫 번째 면을 바닥으로
+                setBaseEdge(baseEdgeIndex);
+                slopeTheta = 0; document.getElementById('slopeAngle').value = 0; document.getElementById('angle-val').innerText = 0; 
+            }
+        }
+
+        function updateSlope() {
+            slopeTheta = document.getElementById('slopeAngle').value;
+            document.getElementById('angle-val').innerText = slopeTheta;
+        }
+
+        setShape('rect'); draw();
+    </script>
+</body>
+</html>

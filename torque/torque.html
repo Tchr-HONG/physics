@@ -22,10 +22,30 @@
         #step1-controls, #step2-controls { display: none; margin-top: 15px; padding-top: 15px; border-top: 1px solid #555; }
         #step1-controls.active, #step2-controls.active { display: block; }
         .data-display { display: flex; justify-content: space-around; background: #1a1a24; padding: 15px; border-radius: 5px; margin-top: 15px; font-size: 1.2em; font-family: monospace; color: #00ffcc; }
+        .home-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            text-decoration: none;
+            background-color: #444;
+            color: #fff;
+            padding: 8px 15px;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            transition: 0.2s;
+            border: 1px solid #666;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        .home-btn:hover {
+            background-color: #ffeb3b;
+            color: #333;
+            border-color: #ffeb3b;
+        }
     </style>
 </head>
 <body>
-
+    <a href="../index.html" class="home-btn">🏠 홈으로 돌아가기</a>
     <h2>🔄 회전 운동과 돌림힘 ($\tau$) 분석</h2>
     
     <div class="container">
