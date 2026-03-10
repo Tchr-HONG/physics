@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>다단계 가상 모빌 만들기</title>
+    <title>궁극의 가상 모빌 실험실</title>
     <style>
         body { font-family: 'Malgun Gothic', sans-serif; text-align: center; background-color: #1e1e2f; color: #fff; padding: 20px; margin: 0; }
         .home-btn { position: absolute; top: 20px; left: 20px; text-decoration: none; background-color: #444; color: #fff; padding: 8px 15px; border-radius: 5px; font-size: 14px; font-weight: bold; transition: 0.2s; border: 1px solid #666; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
@@ -11,21 +11,29 @@
         
         .container { display: flex; flex-direction: column; align-items: center; gap: 15px; margin-top: 40px; }
         canvas { background-color: #2b2b36; border: 2px solid #555; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); cursor: pointer; }
-        .controls { width: 100%; max-width: 800px; background: #2b2b36; padding: 20px; border-radius: 8px; border: 1px solid #444; }
+        .controls { width: 100%; max-width: 850px; background: #2b2b36; padding: 20px; border-radius: 8px; border: 1px solid #444; }
         h2 { color: #ffeb3b; margin-top: 0; }
         
+        .setting-group { background: #3a3a4a; padding: 15px; border-radius: 8px; margin-bottom: 15px; display: flex; justify-content: center; align-items: center; gap: 15px; font-size: 16px; font-weight: bold; box-shadow: inset 0 2px 5px rgba(0,0,0,0.2); }
+        .setting-group input[type="range"] { width: 200px; cursor: pointer; }
+        .pivot-label { color: #ffeb3b; font-size: 1.2em; min-width: 40px; display: inline-block; }
+
         .tool-group { margin: 15px 0; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
-        .tool-btn { padding: 10px 15px; font-size: 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.2s; background-color: #444; color: white; border-bottom: 4px solid transparent; }
+        .tool-btn { padding: 10px 15px; font-size: 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.2s; background-color: #444; color: white; border-bottom: 4px solid transparent; display: flex; align-items: center; gap: 5px; }
         .tool-btn.active { background-color: #555; transform: translateY(2px); border-bottom-width: 2px; }
         
         /* 툴 색상 */
         .w1.active { background-color: #4CAF50; border-color: #388E3C; box-shadow: 0 0 10px #4CAF50; }
         .w2.active { background-color: #FF9800; border-color: #F57C00; box-shadow: 0 0 10px #FF9800; }
         .w3.active { background-color: #E91E63; border-color: #C2185B; box-shadow: 0 0 10px #E91E63; }
+        .w-custom { border-bottom: 4px solid #9C27B0; }
+        .w-custom.active { background-color: #9C27B0; border-color: #7B1FA2; box-shadow: 0 0 10px #9C27B0; }
         .beam-tool { border-bottom: 4px solid #00BCD4; }
         .beam-tool.active { background-color: #00BCD4; border-color: #0097A7; box-shadow: 0 0 10px #00BCD4; }
         .eraser-tool { border-bottom: 4px solid #9E9E9E; }
         .eraser-tool.active { background-color: #757575; border-color: #616161; box-shadow: 0 0 10px #9E9E9E; }
+        
+        .custom-input { width: 45px; font-size: 14px; font-weight: bold; text-align: center; border: none; border-radius: 4px; padding: 4px; color: #333; }
         
         .action-btn { background-color: #f44336; color: white; padding: 10px 20px; font-size: 14px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; margin-top: 5px; }
         
@@ -42,19 +50,28 @@
     <a href="../index.html" class="home-btn">🏠 홈으로 돌아가기</a>
 
     <div class="container">
-        <h2>⚖️ 2단 모빌 만들기: 돌림힘 평형 실험실</h2>
+        <h2>⚖️ 궁극의 모빌 실험실: 받침점 이동 & 커스텀 추</h2>
         <canvas id="simCanvas" width="800" height="500"></canvas>
 
         <div class="controls">
-            <p class="instruction">1. 달고 싶은 추나 보조 막대를 선택하고 눈금을 클릭하세요. (다른 무게를 누르면 교체됩니다)</p>
-            <p class="instruction">2. <b style="color:#ffeb3b;">지우개</b>를 선택하고 매달린 추나 실을 클릭하면 해체됩니다.</p>
+            <div class="setting-group">
+                <label>🔺 메인 막대 받침점(축) 위치 :</label>
+                <input type="range" id="pivot-slider" min="-4" max="4" value="0" step="1" oninput="movePivot(this.value)">
+                <span class="pivot-label" id="pivot-val">0</span>
+            </div>
+
+            <p class="instruction">달고 싶은 도구를 선택하고 눈금을 클릭하세요! (지우개로 해체 가능)</p>
             
             <div class="tool-group">
-                <button class="tool-btn w1 active" id="btn-w1" onclick="setTool('weight', 1)">🟢 1kg 추</button>
-                <button class="tool-btn w2" id="btn-w2" onclick="setTool('weight', 2)">🟠 2kg 추</button>
-                <button class="tool-btn w3" id="btn-w3" onclick="setTool('weight', 3)">🔴 3kg 추</button>
-                <button class="tool-btn beam-tool" id="btn-beam" onclick="setTool('beam', 0)">🟦 2단 보조 막대</button>
-                <button class="tool-btn eraser-tool" id="btn-eraser" onclick="setTool('eraser', 0)">🧽 지우개 (해체)</button>
+                <button class="tool-btn w1 active" id="btn-w1" onclick="setTool('weight', 1)">🟢 1kg</button>
+                <button class="tool-btn w2" id="btn-w2" onclick="setTool('weight', 2)">🟠 2kg</button>
+                <button class="tool-btn w3" id="btn-w3" onclick="setTool('weight', 3)">🔴 3kg</button>
+                <button class="tool-btn w-custom" id="btn-custom" onclick="setTool('custom_weight', 0)">
+                    🟣 직접 입력: 
+                    <input type="number" id="custom-mass" class="custom-input" min="1" max="10" value="5" onclick="event.stopPropagation();" onchange="setTool('custom_weight', 0)"> kg
+                </button>
+                <button class="tool-btn beam-tool" id="btn-beam" onclick="setTool('beam', 0)">🟦 보조 막대</button>
+                <button class="tool-btn eraser-tool" id="btn-eraser" onclick="setTool('eraser', 0)">🧽 지우개</button>
             </div>
 
             <div class="status-board">
@@ -74,57 +91,77 @@
         
         let currentTool = { type: 'weight', mass: 1 };
         
-        // 막대 데이터 구조
+        // 막대 데이터 구조 (0번 눈금 추가 및 pivotPos 변수 추가)
         let rootBeam = {
             level: 1,
-            pegs: [-5, -4, -3, -2, -1, 1, 2, 3, 4, 5],
+            pegs: [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5], 
             spacing: 40,
             items: {},
             angle: 0,
             targetAngle: 0,
-            color: '#607d8b'
+            color: '#607d8b',
+            pivotPos: 0 // 메인 막대의 받침점 위치
         };
 
-        let activePegs = []; // 클릭 가능한 히트박스(Hitbox) 저장 배열
+        let activePegs = []; 
 
+        // 1~3kg 고정 스타일
         const weightStyles = {
             1: { color: '#4CAF50', radius: 15, length: 40 },
-            2: { color: '#FF9800', radius: 22, length: 60 },
-            3: { color: '#E91E63', radius: 28, length: 80 }
+            2: { color: '#FF9800', radius: 22, length: 55 },
+            3: { color: '#E91E63', radius: 28, length: 70 }
         };
 
         function setTool(type, mass) {
             currentTool = { type: type, mass: mass };
             document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            
             if (type === 'weight') document.getElementById('btn-w' + mass).classList.add('active');
+            else if (type === 'custom_weight') document.getElementById('btn-custom').classList.add('active');
             else if (type === 'beam') document.getElementById('btn-beam').classList.add('active');
-            else document.getElementById('btn-eraser').classList.add('active'); // 지우개 활성화
+            else document.getElementById('btn-eraser').classList.add('active');
         }
 
-        // --- 물리 엔진 ---
+        function movePivot(val) {
+            rootBeam.pivotPos = parseInt(val);
+            document.getElementById('pivot-val').innerText = val;
+            updatePhysics(rootBeam);
+        }
+
+        // --- 물리 엔진 핵심 (받침점 위치를 고려한 계산) ---
         function updatePhysics(beam) {
             let leftTorque = 0;
             let rightTorque = 0;
             let totalMass = 0;
+            
+            // 하위 막대는 항상 정중앙에 매달린다고 가정하므로 pivotPos = 0
+            let pivot = beam.pivotPos || 0;
 
             for (let posStr in beam.items) {
                 let pos = parseInt(posStr);
                 let item = beam.items[pos];
                 let itemMass = 0;
                 
-                if (item.type === 'weight') {
+                if (item.type === 'weight' || item.type === 'custom_weight') {
                     itemMass = item.mass;
                 } else if (item.type === 'beam') {
-                    itemMass = updatePhysics(item.beam); // 보조 막대 무게 합산
+                    itemMass = updatePhysics(item.beam); // 보조 막대 질량 합산
                 }
                 
                 totalMass += itemMass;
-                if (pos < 0) leftTorque += Math.abs(pos) * itemMass;
-                else if (pos > 0) rightTorque += pos * itemMass;
+                
+                // 받침점을 기준으로 한 실제 거리 (레버 암)
+                let leverArm = pos - pivot;
+                
+                if (leverArm < 0) {
+                    leftTorque += Math.abs(leverArm) * itemMass;
+                } else if (leverArm > 0) {
+                    rightTorque += leverArm * itemMass;
+                }
             }
             
             let netTorque = rightTorque - leftTorque;
-            beam.targetAngle = Math.max(-0.45, Math.min(0.45, netTorque * 0.04));
+            beam.targetAngle = Math.max(-0.45, Math.min(0.45, netTorque * 0.035));
 
             if (beam === rootBeam) {
                 document.getElementById('torque-left').innerHTML = "&Sigma;&tau;<sub>L</sub> : " + leftTorque + " (거리&times;질량)";
@@ -133,7 +170,7 @@
                 const msgEl = document.getElementById('balance-msg');
                 if (netTorque === 0 && totalMass > 0) {
                     msgEl.className = 'balance-status balanced';
-                    msgEl.innerText = '상태: 완벽한 역학적 평형! ✨';
+                    msgEl.innerText = '상태: 완벽한 역학적 평형! ✨ (알짜 돌림힘 = 0)';
                 } else if (totalMass === 0) {
                     msgEl.className = 'balance-status balanced';
                     msgEl.innerText = '상태: 추나 보조 막대를 매달아 보세요.';
@@ -145,7 +182,7 @@
             return totalMass;
         }
 
-        // --- 캔버스 클릭 처리 (완벽 수정본) ---
+        // --- 캔버스 클릭 처리 ---
         canvas.addEventListener('mousedown', (e) => {
             const rect = canvas.getBoundingClientRect();
             const scaleX = canvas.width / rect.width;
@@ -156,7 +193,6 @@
             let clickedTarget = null;
             let minDist = Infinity;
 
-            // 눈금뿐만 아니라 물체(추, 보조막대 중심)의 위치까지 확장된 클릭 판정
             for (let target of activePegs) {
                 let dist = Math.hypot(mouseX - target.screenX, mouseY - target.screenY);
                 if (dist < target.hitRadius && dist < minDist) {
@@ -169,15 +205,22 @@
                 let beam = clickedTarget.beam;
                 let pos = clickedTarget.pos;
 
-                // 1. 지우개를 선택한 경우
                 if (currentTool.type === 'eraser') {
                     if (beam.items[pos]) delete beam.items[pos];
                 } 
-                // 2. 다른 툴을 선택한 경우 (새로 매달거나 교체)
                 else {
                     if (currentTool.type === 'weight') {
                         beam.items[pos] = { type: 'weight', mass: currentTool.mass };
                     } 
+                    else if (currentTool.type === 'custom_weight') {
+                        // 입력창의 숫자를 가져와서 저장
+                        let customMass = parseInt(document.getElementById('custom-mass').value) || 1;
+                        // 제한 범위 1~10 유지
+                        customMass = Math.max(1, Math.min(10, customMass));
+                        document.getElementById('custom-mass').value = customMass;
+                        
+                        beam.items[pos] = { type: 'custom_weight', mass: customMass };
+                    }
                     else if (currentTool.type === 'beam') {
                         if (beam.level >= 2) {
                             alert("물리 법칙의 안정성을 위해 보조 막대는 1단 막대에만 달 수 있습니다!");
@@ -186,12 +229,13 @@
                                 type: 'beam',
                                 beam: {
                                     level: beam.level + 1,
-                                    pegs: [-3, -2, -1, 1, 2, 3],
+                                    pegs: [-3, -2, -1, 0, 1, 2, 3], // 보조막대도 0번 눈금 추가
                                     spacing: 30,
                                     items: {},
                                     angle: 0,
                                     targetAngle: 0,
-                                    color: '#00BCD4'
+                                    color: '#00BCD4',
+                                    pivotPos: 0
                                 }
                             };
                         }
@@ -203,20 +247,29 @@
 
         function clearAll() {
             rootBeam.items = {};
+            // 슬라이더도 초기화
+            document.getElementById('pivot-slider').value = 0;
+            movePivot(0);
             updatePhysics(rootBeam);
         }
 
-        // --- 렌더링 엔진 ---
+        // --- 렌더링 엔진 (받침점 이동 반영) ---
         function drawBeam(beam, pivotX, pivotY) {
             beam.angle += (beam.targetAngle - beam.angle) * 0.1;
 
             ctx.save();
             ctx.translate(pivotX, pivotY);
 
+            // 중심축 삼각형
             ctx.fillStyle = (beam.level === 1) ? '#ffeb3b' : '#fff';
             ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(-8, 10); ctx.lineTo(8, 10); ctx.fill();
 
             ctx.rotate(beam.angle);
+
+            // 막대를 축(pivotPos)에 맞춰 좌우로 이동시킵니다.
+            // 예를 들어 축이 2번이면, 막대 전체가 왼쪽으로 2칸만큼 당겨져야 합니다.
+            let shiftX = -(beam.pivotPos || 0) * beam.spacing;
+            ctx.translate(shiftX, 0);
 
             const maxPeg = Math.max(...beam.pegs);
             const beamHalfLength = maxPeg * beam.spacing + 15;
@@ -233,32 +286,36 @@
                 let screenX = matrix.a * localX + matrix.e;
                 let screenY = matrix.b * localX + matrix.f;
                 
-                // 1. 눈금 자체의 히트박스 (반경 15)
                 activePegs.push({ beam: beam, pos: pos, screenX: screenX, screenY: screenY, hitRadius: 15 });
 
+                // 0번 눈금은 색상을 다르게 하여 표시
+                ctx.fillStyle = (pos === 0) ? '#ffeb3b' : '#fff';
                 ctx.fillRect(localX - 2, -8, 4, 16);
-                ctx.fillText(Math.abs(pos), localX, -12);
+                ctx.fillText(pos, localX, -12); // 절대값 대신 실제 좌표(음수/양수) 표시로 변경하여 직관성 향상
 
                 if (beam.items[pos]) {
                     let item = beam.items[pos];
+                    let style;
                     
-                    // 2. 매달린 물체 자체의 히트박스 추가 (물체 클릭해도 반응하도록)
-                    if (item.type === 'weight') {
-                        let style = weightStyles[item.mass];
-                        // 중력 방향(수직 아래)으로 매달리므로 화면 Y좌표에 길이를 더해줌
+                    // 커스텀 질량에 따른 동적 크기 조절
+                    if (item.type === 'custom_weight') {
+                        let m = item.mass;
+                        style = { color: '#9C27B0', radius: 10 + m * 2.5, length: 30 + m * 3 };
+                    } else if (item.type === 'weight') {
+                        style = weightStyles[item.mass];
+                    }
+
+                    if (item.type === 'weight' || item.type === 'custom_weight') {
                         activePegs.push({ beam: beam, pos: pos, screenX: screenX, screenY: screenY + style.length + style.radius, hitRadius: style.radius + 15 });
                     } else if (item.type === 'beam') {
-                        // 실의 중간 부분을 눌러도 반응하도록 추가
                         activePegs.push({ beam: beam, pos: pos, screenX: screenX, screenY: screenY + 50, hitRadius: 40 });
                     }
 
-                    // 물체 그리기
                     ctx.save();
                     ctx.translate(localX, 4); 
-                    ctx.rotate(-beam.angle);  // 중력 방향 역회전
+                    ctx.rotate(-beam.angle);  // 중력 방향
 
-                    if (item.type === 'weight') {
-                        let style = weightStyles[item.mass];
+                    if (item.type === 'weight' || item.type === 'custom_weight') {
                         ctx.strokeStyle = '#ccc'; ctx.lineWidth = 2;
                         ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, style.length); ctx.stroke();
                         ctx.fillStyle = style.color;
@@ -268,7 +325,7 @@
                         ctx.fillText(item.mass + 'kg', 0, style.length + style.radius + 5);
                     } 
                     else if (item.type === 'beam') {
-                        const stringLen = 100; 
+                        const stringLen = 90; 
                         ctx.strokeStyle = '#ccc'; ctx.lineWidth = 2;
                         ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, stringLen); ctx.stroke();
                         drawBeam(item.beam, 0, stringLen);
@@ -284,7 +341,7 @@
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            activePegs = []; // 프레임마다 클릭 영역 초기화
+            activePegs = []; 
 
             ctx.strokeStyle = '#888'; ctx.lineWidth = 4;
             ctx.beginPath(); ctx.moveTo(300, 0); ctx.lineTo(500, 0); ctx.stroke();
